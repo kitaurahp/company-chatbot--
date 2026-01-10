@@ -31,12 +31,12 @@ data/
 *.db
 *.sqlite
 
-# ドキュメント（実際の社内規定ファイルはgitに上げない）
-documents/*.pdf
-documents/*.docx
-documents/*.xlsx
-documents/*.doc
-documents/*.xls
+# ドキュメント（リポジトリがprivateなのでドキュメントを含める）
+# documents/*.pdf
+# documents/*.docx
+# documents/*.xlsx
+# documents/*.doc
+# documents/*.xls
 
 # IDE
 .vscode/
