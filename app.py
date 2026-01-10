@@ -184,7 +184,10 @@ def generate_answer(query: str, context_chunks: list, model_name: str = "llama-3
     if not api_key:
         return "エラー: GROQ_API_KEYが設定されていません。"
 
-    client = Groq(api_key=api_key)
+    try:
+        client = Groq(api_key=api_key)
+    except Exception as e:
+        return f"エラー: Groq APIの初期化に失敗しました。{str(e)}"
 
     # コンテキストを結合
     context = "\n\n---\n\n".join([
