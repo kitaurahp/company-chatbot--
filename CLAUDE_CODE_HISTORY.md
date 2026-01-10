@@ -1,27 +1,37 @@
 # Claude Code 会話履歴の活用方法
 
-## 最新の進捗状況（2026-01-08）
+## 最新の進捗状況（2026-01-09）
 
 ### 現在の構成
 - **検索**: ローカル（Sentence Transformers + ChromaDB）- 無料
 - **回答生成**: Groq API（Llama 3.3 70B）- 無料・高精度
+- **デプロイ**: Streamlit Community Cloud - 無料
+- **認証**: パスワード認証（company2024）
 
-### 完了した改善
+### Streamlit Cloud デプロイ完了！
+- **アプリURL**: https://kitaurahp-company-chatbot-.streamlit.app （要確認）
+- **GitHubリポジトリ**: https://github.com/kitaurahp/company-chatbot-
+- **パスワード**: company2024（Streamlit Secretsで設定済み）
+
+### 完了した作業
 1. Word埋め込みExcelの抽出対応（勤務時間表など）
 2. 部門ごとに分割して抽出（検索精度向上）
 3. ハイブリッド検索（ベクトル + キーワード）
 4. Groq APIへの切り替え（無料・高精度）
 5. キャッシュ機能（同じ質問は再利用）
 6. 回答フォーマットの改善（見やすい表示）
+7. パスワード認証機能追加
+8. Streamlit Community Cloudにデプロイ
+9. Mac/Windows用起動スクリプト作成（start_chatbot.command / start_chatbot.bat）
 
-### APIキー設定済み
-- GROQ_API_KEY: .envファイルに保存済み
+### 次回やること
+- Googleサイトにアプリのリンクを挿入
 
 ### 再開時にClaude Codeに伝えること
 ```
 company-chatbotフォルダで作業を続けます。
-前回はGroq APIを使った社内規定チャットボットを構築中でした。
-現在の状態を確認してください。
+前回はStreamlit Community Cloudへのデプロイが完了しました。
+Googleサイトにリンクを挿入するところから再開したいです。
 ```
 
 ---
