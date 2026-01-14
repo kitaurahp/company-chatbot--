@@ -583,7 +583,7 @@ def main():
                 expanded_prompt = expand_query(prompt)
 
                 # ハイブリッド検索（ベクトル + キーワード）
-                search_results = st.session_state.vector_store.search(expanded_prompt, n_results=5)
+                search_results = st.session_state.vector_store.search(expanded_prompt, n_results=8)
 
                 # デバッグモード：検索結果を表示
                 if debug_mode and search_results:
