@@ -85,6 +85,179 @@ def init_session_state():
         st.session_state.vector_store = None
     if 'initialized' not in st.session_state:
         st.session_state.initialized = False
+    if 'guide_step' not in st.session_state:
+        st.session_state.guide_step = 'category'  # category, subcategory, question, or free
+    if 'selected_category' not in st.session_state:
+        st.session_state.selected_category = None
+    if 'selected_subcategory' not in st.session_state:
+        st.session_state.selected_subcategory = None
+
+
+# カテゴリとサブカテゴリの定義
+QUESTION_GUIDE = {
+    "勤務・労働時間": {
+        "icon": "⏰",
+        "subcategories": {
+            "勤務時間": [
+                "勤務時間は何時から何時までですか？",
+                "休憩時間は何分ですか？",
+                "遅番・早番のシフトについて教えてください",
+            ],
+            "残業": [
+                "残業の申請方法を教えてください",
+                "残業手当はどのように計算されますか？",
+                "残業の上限時間はありますか？",
+            ],
+            "出退勤": [
+                "遅刻した場合の手続きは？",
+                "早退する場合はどうすればいいですか？",
+                "直行直帰の申請方法は？",
+            ],
+        }
+    },
+    "休暇・休業": {
+        "icon": "🏖️",
+        "subcategories": {
+            "有給休暇": [
+                "有給休暇は何日もらえますか？",
+                "有給休暇の申請方法を教えてください",
+                "有給休暇の繰り越しはできますか？",
+            ],
+            "特別休暇": [
+                "慶弔休暇について教えてください",
+                "夏季休暇・年末年始休暇について",
+                "リフレッシュ休暇はありますか？",
+            ],
+            "育児・介護休業": [
+                "育児休業の取得条件は？",
+                "介護休業はどのくらい取れますか？",
+                "育児短時間勤務について教えてください",
+            ],
+        }
+    },
+    "給与・手当": {
+        "icon": "💰",
+        "subcategories": {
+            "給与": [
+                "給与の支払日はいつですか？",
+                "給与明細の見方を教えてください",
+                "昇給はいつ行われますか？",
+            ],
+            "手当": [
+                "通勤手当について教えてください",
+                "住宅手当はありますか？",
+                "資格手当の対象資格は？",
+            ],
+            "賞与・評価": [
+                "賞与の支給時期と回数は？",
+                "ベースアップ評価料について教えてください",
+                "人事評価の基準は？",
+            ],
+        }
+    },
+    "出張・経費": {
+        "icon": "✈️",
+        "subcategories": {
+            "出張": [
+                "出張の申請方法を教えてください",
+                "出張旅費の精算方法は？",
+                "日当・宿泊費の規定を教えてください",
+            ],
+            "経費精算": [
+                "経費精算の手順を教えてください",
+                "領収書が必要な場合は？",
+                "経費精算の締め日はいつですか？",
+            ],
+        }
+    },
+    "パートタイマー": {
+        "icon": "👥",
+        "subcategories": {
+            "雇用条件": [
+                "パートタイマーの勤務時間について",
+                "パートタイマーの契約更新について",
+                "正社員登用制度はありますか？",
+            ],
+            "待遇": [
+                "パートタイマーの有給休暇について",
+                "パートタイマーの社会保険について",
+                "パートタイマーの賞与はありますか？",
+            ],
+        }
+    },
+}
+
+
+def reset_guide():
+    """ガイドをリセット"""
+    st.session_state.guide_step = 'category'
+    st.session_state.selected_category = None
+    st.session_state.selected_subcategory = None
+
+
+def render_guide_ui():
+    """ガイド付き質問選択UIを表示"""
+    step = st.session_state.guide_step
+
+    if step == 'category':
+        st.markdown("### 📋 どのカテゴリについて知りたいですか？")
+        st.caption("カテゴリを選択するか、下の入力欄に直接質問を入力できます")
+
+        cols = st.columns(3)
+        for idx, (category, data) in enumerate(QUESTION_GUIDE.items()):
+            with cols[idx % 3]:
+                if st.button(f"{data['icon']} {category}", key=f"cat_{idx}", use_container_width=True):
+                    st.session_state.selected_category = category
+                    st.session_state.guide_step = 'subcategory'
+                    st.rerun()
+
+    elif step == 'subcategory':
+        category = st.session_state.selected_category
+        data = QUESTION_GUIDE[category]
+
+        st.markdown(f"### {data['icon']} {category}")
+
+        col1, col2 = st.columns([1, 5])
+        with col1:
+            if st.button("◀ 戻る", key="back_to_cat"):
+                reset_guide()
+                st.rerun()
+
+        st.markdown("**詳しく知りたい項目を選んでください：**")
+
+        cols = st.columns(3)
+        for idx, subcategory in enumerate(data['subcategories'].keys()):
+            with cols[idx % 3]:
+                if st.button(f"📁 {subcategory}", key=f"subcat_{idx}", use_container_width=True):
+                    st.session_state.selected_subcategory = subcategory
+                    st.session_state.guide_step = 'question'
+                    st.rerun()
+
+    elif step == 'question':
+        category = st.session_state.selected_category
+        subcategory = st.session_state.selected_subcategory
+        data = QUESTION_GUIDE[category]
+        questions = data['subcategories'][subcategory]
+
+        st.markdown(f"### {data['icon']} {category} > {subcategory}")
+
+        col1, col2 = st.columns([1, 5])
+        with col1:
+            if st.button("◀ 戻る", key="back_to_subcat"):
+                st.session_state.guide_step = 'subcategory'
+                st.session_state.selected_subcategory = None
+                st.rerun()
+
+        st.markdown("**質問を選んでください：**")
+
+        for idx, question in enumerate(questions):
+            if st.button(f"💬 {question}", key=f"q_{idx}", use_container_width=True):
+                return question
+
+        st.markdown("---")
+        st.caption("💡 上記以外の質問は下の入力欄に直接入力してください")
+
+    return None
 
 
 def initialize_vector_store():
@@ -129,11 +302,23 @@ def expand_query(query: str) -> str:
     """
     # 同義語マッピング（必要に応じて追加可能）
     synonyms = {
-        "休暇": ["休暇", "休業"],
+        "休暇": ["休暇", "休業", "年次有給休暇"],
         "休業": ["休暇", "休業"],
-        "勤務時間": ["勤務時間", "始業", "終業", "労働時間"],
+        "有給": ["有給", "年次有給休暇", "有休"],
+        "勤務時間": ["勤務時間", "始業", "終業", "労働時間", "所定労働時間"],
         "始業": ["始業", "勤務時間", "出勤"],
         "終業": ["終業", "勤務時間", "退勤"],
+        "残業": ["残業", "時間外労働", "時間外勤務"],
+        "給与": ["給与", "賃金", "給料"],
+        "賞与": ["賞与", "ボーナス"],
+        "手当": ["手当", "諸手当"],
+        "育児": ["育児", "育児休業", "育休"],
+        "介護": ["介護", "介護休業"],
+        "出張": ["出張", "旅費", "出張旅費"],
+        "パート": ["パート", "パートタイマー", "パートタイム"],
+        "遅刻": ["遅刻", "遅参"],
+        "早退": ["早退"],
+        "シフト": ["シフト", "勤務形態", "勤務パターン"],
     }
 
     expanded_query = query
@@ -284,6 +469,7 @@ def main():
 
         if st.button("チャット履歴をクリア", use_container_width=True):
             st.session_state.messages = []
+            reset_guide()  # ガイドもリセット
             st.success("チャット履歴をクリアしました")
             st.rerun()
 
@@ -322,8 +508,28 @@ def main():
                 if unique_files:
                     st.caption("📚 参考資料: " + " / ".join(unique_files))
 
-    # ユーザー入力
-    if prompt := st.chat_input("質問を入力してください（例：有給休暇の申請方法は？）"):
+    # ガイド付き質問選択UIを表示（メッセージがない場合、または新しい質問を開始する場合）
+    guided_question = None
+    if not st.session_state.messages:
+        guided_question = render_guide_ui()
+    else:
+        # メッセージがある場合は「新しい質問」ボタンを表示
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🔄 新しい質問を選ぶ", use_container_width=True):
+                reset_guide()
+                st.session_state.messages = []
+                st.rerun()
+
+    # ガイドから選択された質問を処理
+    if guided_question:
+        prompt = guided_question
+        reset_guide()  # ガイドをリセット
+    else:
+        # ユーザー入力
+        prompt = st.chat_input("質問を入力してください（例：有給休暇の申請方法は？）")
+
+    if prompt:
         # ユーザーメッセージを表示
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
