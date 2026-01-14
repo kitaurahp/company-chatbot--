@@ -484,7 +484,7 @@ def main():
         st.subheader("🤖 LLMモデル")
         model_name = st.selectbox(
             "使用するモデル",
-            ["llama-3.3-70b-versatile", "llama3-70b-8192", "mixtral-8x7b-32768"],
+            ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it"],
             help="Groq API（無料・高速）"
         )
         st.info("🔍 検索: ローカル（無料）\n🤖 回答: Groq API（高精度・無料）")
