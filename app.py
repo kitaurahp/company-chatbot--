@@ -511,9 +511,10 @@ def main():
     # ガイド付き質問選択UIを表示
     guided_question = None
 
-    # エクスパンダーでガイドを表示（常に利用可能）
-    with st.expander("📋 質問カテゴリから選ぶ", expanded=not st.session_state.messages):
-        guided_question = render_guide_ui()
+    # ガイドを直接表示
+    st.markdown("---")
+    guided_question = render_guide_ui()
+    st.markdown("---")
 
     # ガイドから選択された質問を処理
     if guided_question:
