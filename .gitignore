@@ -51,3 +51,4 @@ Thumbs.db
 
 # Streamlit secrets（APIキーなどの機密情報）
 .streamlit/secrets.toml
+運営規程PW.rtf
