@@ -86,11 +86,29 @@ def init_session_state():
     if 'initialized' not in st.session_state:
         st.session_state.initialized = False
     if 'guide_step' not in st.session_state:
-        st.session_state.guide_step = 'category'  # category, subcategory, question, or free
+        st.session_state.guide_step = 'department'  # department, category, subcategory, question
+    if 'selected_department' not in st.session_state:
+        st.session_state.selected_department = None
     if 'selected_category' not in st.session_state:
         st.session_state.selected_category = None
     if 'selected_subcategory' not in st.session_state:
         st.session_state.selected_subcategory = None
+
+
+# 部署リスト
+DEPARTMENTS = [
+    {"name": "診療部", "icon": "🏥"},
+    {"name": "看護部門", "icon": "👩‍⚕️"},
+    {"name": "放射線科", "icon": "📡"},
+    {"name": "リハビリテーション科", "icon": "🏃"},
+    {"name": "栄養科", "icon": "🍽️"},
+    {"name": "検査科", "icon": "🔬"},
+    {"name": "薬局", "icon": "💊"},
+    {"name": "地域連携室", "icon": "🤝"},
+    {"name": "事務部門", "icon": "📋"},
+    {"name": "訪問看護ステーション", "icon": "🚗"},
+    {"name": "パートタイマー", "icon": "👥"},
+]
 
 
 # カテゴリとサブカテゴリの定義
@@ -190,7 +208,8 @@ QUESTION_GUIDE = {
 
 def reset_guide():
     """ガイドをリセット"""
-    st.session_state.guide_step = 'category'
+    st.session_state.guide_step = 'department'
+    st.session_state.selected_department = None
     st.session_state.selected_category = None
     st.session_state.selected_subcategory = None
 
@@ -199,9 +218,32 @@ def render_guide_ui():
     """ガイド付き質問選択UIを表示"""
     step = st.session_state.guide_step
 
-    if step == 'category':
+    # 選択中の部署を表示
+    if st.session_state.selected_department:
+        st.info(f"🏢 選択中の部署: **{st.session_state.selected_department}**")
+
+    if step == 'department':
+        st.markdown("### 🏢 あなたの部署を選んでください")
+        st.caption("部署によって勤務時間などの規定が異なります")
+
+        cols = st.columns(3)
+        for idx, dept in enumerate(DEPARTMENTS):
+            with cols[idx % 3]:
+                if st.button(f"{dept['icon']} {dept['name']}", key=f"dept_{idx}", use_container_width=True):
+                    st.session_state.selected_department = dept['name']
+                    st.session_state.guide_step = 'category'
+                    st.rerun()
+
+    elif step == 'category':
         st.markdown("### 📋 どのカテゴリについて知りたいですか？")
         st.caption("カテゴリを選択するか、下の入力欄に直接質問を入力できます")
+
+        col1, col2 = st.columns([1, 5])
+        with col1:
+            if st.button("◀ 部署選択", key="back_to_dept"):
+                st.session_state.guide_step = 'department'
+                st.session_state.selected_department = None
+                st.rerun()
 
         cols = st.columns(3)
         for idx, (category, data) in enumerate(QUESTION_GUIDE.items()):
@@ -220,7 +262,8 @@ def render_guide_ui():
         col1, col2 = st.columns([1, 5])
         with col1:
             if st.button("◀ 戻る", key="back_to_cat"):
-                reset_guide()
+                st.session_state.guide_step = 'category'
+                st.session_state.selected_category = None
                 st.rerun()
 
         st.markdown("**詳しく知りたい項目を選んでください：**")
@@ -236,6 +279,7 @@ def render_guide_ui():
     elif step == 'question':
         category = st.session_state.selected_category
         subcategory = st.session_state.selected_subcategory
+        department = st.session_state.selected_department
         data = QUESTION_GUIDE[category]
         questions = data['subcategories'][subcategory]
 
@@ -251,8 +295,10 @@ def render_guide_ui():
         st.markdown("**質問を選んでください：**")
 
         for idx, question in enumerate(questions):
+            # 部署情報を質問に付加
+            full_question = f"【{department}】{question}" if department else question
             if st.button(f"💬 {question}", key=f"q_{idx}", use_container_width=True):
-                return question
+                return full_question
 
         st.markdown("---")
         st.caption("💡 上記以外の質問は下の入力欄に直接入力してください")
