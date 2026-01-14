@@ -508,18 +508,12 @@ def main():
                 if unique_files:
                     st.caption("📚 参考資料: " + " / ".join(unique_files))
 
-    # ガイド付き質問選択UIを表示（メッセージがない場合、または新しい質問を開始する場合）
+    # ガイド付き質問選択UIを表示
     guided_question = None
-    if not st.session_state.messages:
+
+    # エクスパンダーでガイドを表示（常に利用可能）
+    with st.expander("📋 質問カテゴリから選ぶ", expanded=not st.session_state.messages):
         guided_question = render_guide_ui()
-    else:
-        # メッセージがある場合は「新しい質問」ボタンを表示
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🔄 新しい質問を選ぶ", use_container_width=True):
-                reset_guide()
-                st.session_state.messages = []
-                st.rerun()
 
     # ガイドから選択された質問を処理
     if guided_question:
