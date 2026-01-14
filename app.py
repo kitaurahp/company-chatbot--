@@ -455,7 +455,7 @@ def generate_answer(query: str, context_chunks: list, model_name: str = "llama-3
             model=model_name,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_tokens=2000
+            max_tokens=1000
         )
         result = response.choices[0].message.content
 
@@ -583,7 +583,7 @@ def main():
                 expanded_prompt = expand_query(prompt)
 
                 # ハイブリッド検索（ベクトル + キーワード）
-                search_results = st.session_state.vector_store.search(expanded_prompt, n_results=15)
+                search_results = st.session_state.vector_store.search(expanded_prompt, n_results=5)
 
                 # デバッグモード：検索結果を表示
                 if debug_mode and search_results:
