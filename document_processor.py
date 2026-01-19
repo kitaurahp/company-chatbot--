@@ -4,6 +4,7 @@ PDF、Word、Excelファイルからテキストを抽出します
 """
 import os
 import io
+import re
 import zipfile
 from typing import List, Dict
 from pathlib import Path
@@ -14,6 +15,19 @@ import openpyxl
 
 class DocumentProcessor:
     """各種ドキュメント形式からテキストを抽出するクラス"""
+
+    @staticmethod
+    def _format_time(text: str) -> str:
+        """時刻形式を整形（08:30:00 → 8:30）"""
+        # HH:MM:SS形式を H:MM形式に変換
+        def replace_time(match):
+            h, m, s = match.groups()
+            hour = int(h)
+            return f"{hour}:{m}"
+
+        # 00:00:00 形式を探して変換
+        text = re.sub(r'(\d{2}):(\d{2}):(\d{2})', replace_time, text)
+        return text
 
     def __init__(self, documents_dir: str = "documents"):
         """
@@ -105,6 +119,7 @@ class DocumentProcessor:
                         first_cell and
                         (first_cell.endswith('科') or first_cell.endswith('部') or
                          first_cell.endswith('部門') or first_cell.endswith('室') or
+                         first_cell.endswith('局') or  # 薬局対応
                          '看護' in first_cell or 'ステーション' in first_cell) and
                         len(first_cell) >= 2
                     )
@@ -141,6 +156,9 @@ class DocumentProcessor:
 
         except Exception as e:
             print(f"埋め込みExcel読み込みエラー ({source_name}): {e}")
+
+        # 時刻形式を整形（08:30:00 → 8:30）
+        text = self._format_time(text)
         return text
 
     def _extract_table(self, table) -> str:
@@ -189,6 +207,16 @@ class DocumentProcessor:
             print(f"Excel読み込みエラー ({file_path}): {e}")
         return text
 
+    def extract_text_from_txt(self, file_path: Path) -> str:
+        """テキストファイルからテキストを抽出"""
+        text = ""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                text = file.read()
+        except Exception as e:
+            print(f"テキストファイル読み込みエラー ({file_path}): {e}")
+        return text
+
     def process_document(self, file_path: Path) -> Dict[str, str]:
         """
         ファイル形式に応じてテキストを抽出
@@ -207,6 +235,9 @@ class DocumentProcessor:
         elif suffix in ['.xlsx', '.xls']:
             content = self.extract_text_from_excel(file_path)
             file_type = 'Excel'
+        elif suffix == '.txt':
+            content = self.extract_text_from_txt(file_path)
+            file_type = 'Text'
         else:
             content = ""
             file_type = 'Unknown'
@@ -226,7 +257,7 @@ class DocumentProcessor:
             処理されたドキュメントのリスト
         """
         documents = []
-        supported_extensions = ['.pdf', '.docx', '.doc', '.xlsx', '.xls']
+        supported_extensions = ['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.txt']
 
         if not self.documents_dir.exists():
             print(f"警告: ディレクトリが存在しません: {self.documents_dir}")
