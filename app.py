@@ -5,9 +5,13 @@ Streamlit + Gemini + ChromaDB
 import os
 import hashlib
 import json
+import time
 import streamlit as st
 from dotenv import load_dotenv
 import google.generativeai as genai
+from groq import Groq
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from google.api_core.exceptions import ResourceExhausted
 from document_processor import DocumentProcessor
 from vector_store import VectorStore
 
@@ -16,6 +20,7 @@ load_dotenv()
 
 # デフォルトのAPIキー（後で変更可能）
 DEFAULT_GEMINI_API_KEY = "AIzaSyAHVrTdzDcs7tzR8iP4qnUyQLz2dIhC0JA"
+DEFAULT_GROQ_API_KEY = ""  # Groq APIキーはユーザーが設定する必要があります
 
 
 def get_gemini_api_key():
@@ -30,6 +35,20 @@ def get_gemini_api_key():
         pass
     # 3. デフォルトキー
     return DEFAULT_GEMINI_API_KEY
+
+
+def get_groq_api_key():
+    """Groq APIキーを取得（優先順位: session_state > secrets > デフォルト）"""
+    # 1. session_stateに保存されたキー（管理画面で設定）
+    if 'groq_api_key' in st.session_state and st.session_state.groq_api_key:
+        return st.session_state.groq_api_key
+    # 2. Streamlit Secretsから取得
+    try:
+        return st.secrets["GROQ_API_KEY"]
+    except (KeyError, FileNotFoundError):
+        pass
+    # 3. デフォルトキー
+    return DEFAULT_GROQ_API_KEY
 
 # ページ設定
 st.set_page_config(
@@ -130,8 +149,55 @@ def render_admin_page():
     # 管理者認証済み
     st.success("管理者としてログイン中")
 
+    # === Groq APIキー設定（推奨） ===
     st.markdown("---")
-    st.markdown("### Gemini APIキー設定")
+    st.markdown("### 🚀 Groq APIキー設定（推奨）")
+    st.markdown("Groqは高速で安定したLLMサービスです。無料で利用できます。")
+
+    # 現在のGroq APIキーの状態を表示
+    groq_key = get_groq_api_key()
+    if groq_key:
+        st.success("✅ Groq APIキーが設定されています")
+    else:
+        st.warning("⚠️ Groq APIキーが未設定です。設定することを推奨します。")
+
+    # 新しいGroq APIキーの入力
+    new_groq_key = st.text_input(
+        "Groq APIキー",
+        type="password",
+        placeholder="gsk_...",
+        key="new_groq_key_input"
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Groqキーを更新", use_container_width=True, key="update_groq"):
+            if new_groq_key:
+                st.session_state.groq_api_key = new_groq_key
+                st.success("Groq APIキーを更新しました")
+                st.rerun()
+            else:
+                st.error("APIキーを入力してください")
+
+    with col2:
+        if st.button("Groqキーを削除", use_container_width=True, key="delete_groq"):
+            if 'groq_api_key' in st.session_state:
+                del st.session_state.groq_api_key
+            st.success("Groq APIキーを削除しました")
+            st.rerun()
+
+    st.markdown("""
+    **Groq APIキーの取得方法:**
+    1. [console.groq.com](https://console.groq.com/keys) にアクセス
+    2. アカウントを作成（無料）
+    3. 「Create API Key」をクリック
+    4. 生成されたキーをコピーして上に貼り付け
+    """)
+
+    # === Gemini APIキー設定（フォールバック） ===
+    st.markdown("---")
+    st.markdown("### Gemini APIキー設定（フォールバック用）")
+    st.markdown("Groqが利用できない場合に使用されます。")
 
     # 現在のAPIキーの状態を表示
     current_key = get_gemini_api_key()
@@ -142,11 +208,11 @@ def render_admin_page():
             _ = st.secrets["GEMINI_API_KEY"]
             st.info("現在: Secrets設定のAPIキーを使用中")
         except (KeyError, FileNotFoundError):
-            st.warning("現在: デフォルトAPIキーを使用中")
+            st.warning("現在: デフォルトAPIキーを使用中（不安定な場合があります）")
 
     # 新しいAPIキーの入力
     new_api_key = st.text_input(
-        "新しいAPIキー",
+        "Gemini APIキー",
         type="password",
         placeholder="AIzaSy...",
         key="new_api_key_input"
@@ -154,16 +220,16 @@ def render_admin_page():
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("APIキーを更新", use_container_width=True):
+        if st.button("Geminiキーを更新", use_container_width=True, key="update_gemini"):
             if new_api_key:
                 st.session_state.gemini_api_key = new_api_key
-                st.success("APIキーを更新しました")
+                st.success("Gemini APIキーを更新しました")
                 st.rerun()
             else:
                 st.error("APIキーを入力してください")
 
     with col2:
-        if st.button("デフォルトに戻す", use_container_width=True):
+        if st.button("デフォルトに戻す", use_container_width=True, key="reset_gemini"):
             if 'gemini_api_key' in st.session_state:
                 del st.session_state.gemini_api_key
             st.success("デフォルトAPIキーに戻しました")
@@ -173,7 +239,9 @@ def render_admin_page():
     st.markdown("### 注意事項")
     st.markdown("""
     - APIキーの変更はアプリ再起動まで有効です
-    - 永続的に変更するには、Streamlit Cloudの「Secrets」設定で `GEMINI_API_KEY` を設定してください
+    - 永続的に変更するには、Streamlit Cloudの「Secrets」設定で設定してください:
+      - `GROQ_API_KEY` : Groq用
+      - `GEMINI_API_KEY` : Gemini用
     """)
 
     st.markdown("---")
@@ -330,9 +398,238 @@ def get_cache_key(query: str, context_chunks: list) -> str:
     return content_hash
 
 
+# よくある質問の事前キャッシュ（APIを使わずに回答を返す）
+PRECACHED_RESPONSES = {
+    "有給休暇と特別休暇の付与日数を教えてください": """## 年次有給休暇
+
+| 勤続年数 | 6か月 | 1年6か月 | 2年6か月 | 3年6か月 | 4年6か月 | 5年6か月 | 6年6か月以上 |
+|----------|-------|---------|---------|---------|---------|---------|-------------|
+| 付与日数 | 10日 | 11日 | 12日 | 14日 | 16日 | 18日 | 20日 |
+
+## 特別休暇
+
+### 慶弔休暇
+
+| 事由 | 日数 |
+|------|------|
+| 本人が結婚したとき | 5日 |
+| 配偶者・子・父母が死亡したとき | 3日 |
+| 兄弟姉妹・祖父母が死亡したとき | 1日 |
+
+### 新特別休暇（夏季休暇廃止後の制度）
+
+| 入職時期 | 付与日数 |
+|----------|----------|
+| 4月～7月 | 3日 |
+| 8月～11月 | 2日 |
+| 12月～3月 | 1日 |
+
+※半日単位から取得可能、有給扱い、年度内に取得（繰り越し不可）""",
+
+    "介護休業について教えてください": """## 介護休業制度
+
+### 基本情報
+
+| 項目 | 内容 |
+|:-----|:-----|
+| 取得日数 | 対象家族1人につき **のべ93日間まで** |
+| 取得回数 | **3回まで**分割取得可能 |
+| 申出期限 | 休業開始予定日の **2週間前まで** |
+| 申出方法 | 介護休業申出書を病院に提出 |
+
+### 対象となる家族
+
+| 対象家族 |
+|:---------|
+| 配偶者 |
+| 父母 |
+| 子 |
+| 配偶者の父母 |
+| 祖父母、兄弟姉妹又は孫 |
+| 上記以外で病院が認めた者 |
+
+### 対象者の条件
+
+| 区分 | 条件 |
+|:-----|:-----|
+| 正職員 | 要介護状態の家族を介護する職員（日雇職員を除く） |
+| 期間契約職員 | 入社1年以上、かつ休業開始から93日+6か月後まで契約継続見込み |
+
+### 取得できない場合
+
+| 除外される職員 |
+|:---------------|
+| 入社1年未満の職員 |
+| 申出日から93日以内に雇用終了が明らかな職員 |
+| 週の所定労働日数が2日以下の職員 |
+
+※要介護状態とは、2週間以上の期間にわたり常時介護を必要とする状態をいいます""",
+
+    "育児休業について教えてください": """## 育児休業制度
+
+### 基本情報
+
+| 項目 | 内容 |
+|:-----|:-----|
+| 対象 | 1歳に満たない子と同居し養育する職員（日雇職員を除く） |
+| 申出期限 | 休業開始予定日の **1か月前まで**（1歳超の延長は2週間前まで） |
+| 申出回数 | 一子につき **1回**（出生後8週間以内の最初の育児休業は回数に含めない） |
+| 申出方法 | 育児休業申出書を病院に提出 |
+
+### 取得可能期間
+
+| 区分 | 期間 | 条件 |
+|:-----|:-----|:-----|
+| 原則 | 子が **1歳に達するまで** | - |
+| 1歳2か月まで | 子が **1歳2か月に達するまで** | 配偶者が職員と同じ日から又は職員より先に育児休業をしている場合 |
+| 1歳6か月まで | 子が **1歳6か月に達するまで** | 子の1歳の誕生日前日に育児休業中で、保育所等に入所できない場合等 |
+| 2歳まで | 子が **2歳に達するまで** | 子の1歳6か月の誕生日応当日前日に育児休業中で、保育所等に入所できない場合等 |
+
+### 期間契約職員の条件
+
+| 条件 |
+|:-----|
+| 入社1年以上であること |
+| 子が1歳6か月（2歳までの延長申出の場合は2歳）に達する日までに労働契約期間が満了し、更新されないことが明らかでないこと |
+
+### 取得できない場合（労使協定により除外）
+
+| 除外される職員 |
+|:---------------|
+| 入社1年未満の職員 |
+| 申出の日から1年以内に雇用関係が終了することが明らかな職員 |
+| 1週間の所定労働日数が2日以下の職員 |""",
+
+    "時間外手当について教えてください": """## 時間外手当・割増賃金（全部署共通）
+
+### 時間外労働の割増賃金
+
+| 区分 | 条件 | 割増率 |
+|:-----|:-----|:------:|
+| 時間外労働 | 月45時間以下 | **25%** |
+| 時間外労働 | 月45時間超〜60時間以下 | **35%** |
+| 時間外労働 | 月60時間超の部分 | **50%** |
+| 時間外労働 | 年360時間超の部分 | **40%** |
+
+### 休日労働・深夜労働の割増賃金
+
+| 区分 | 条件 | 割増率 |
+|:-----|:-----|:------:|
+| 休日労働 | 法定休日 | **35%** |
+| 深夜労働 | 22:00〜5:00 | **25%** |
+
+※時間外労働が深夜に及ぶ場合は、時間外割増＋深夜割増となります""",
+}
+
+
+def get_precached_response(query: str) -> str | None:
+    """
+    事前キャッシュされた回答を取得
+
+    Args:
+        query: ユーザーの質問
+
+    Returns:
+        キャッシュされた回答、なければNone
+    """
+    # 完全一致
+    if query in PRECACHED_RESPONSES:
+        return PRECACHED_RESPONSES[query]
+
+    # 部分一致で検索
+    query_lower = query.lower()
+    for key, response in PRECACHED_RESPONSES.items():
+        # キーワードベースのマッチング
+        if '有給' in query and '特別休暇' in query:
+            return PRECACHED_RESPONSES.get("有給休暇と特別休暇の付与日数を教えてください")
+        if '介護休業' in query or ('介護' in query and '休' in query):
+            return PRECACHED_RESPONSES.get("介護休業について教えてください")
+        if '育児休業' in query or '育休' in query or ('育児' in query and '休' in query):
+            return PRECACHED_RESPONSES.get("育児休業について教えてください")
+        if '時間外手当' in query or ('残業' in query and '手当' in query) or '割増賃金' in query:
+            return PRECACHED_RESPONSES.get("時間外手当について教えてください")
+
+    return None
+
+
+def call_groq_api(prompt: str, api_key: str, model_name: str = 'llama-3.3-70b-versatile'):
+    """
+    Groq APIを呼び出す
+
+    Args:
+        prompt: プロンプト
+        api_key: APIキー
+        model_name: 使用するモデル名
+
+    Returns:
+        回答テキスト
+    """
+    client = Groq(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model_name,
+        messages=[
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.1,
+        max_tokens=8000,
+    )
+    return response.choices[0].message.content
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=4, max=30),
+    reraise=True
+)
+def call_groq_with_retry(prompt: str, api_key: str, model_name: str = 'llama-3.3-70b-versatile'):
+    """
+    リトライ機能付きでGroq APIを呼び出す
+    エクスポネンシャルバックオフ: 4秒 → 8秒 → 16秒
+    """
+    return call_groq_api(prompt, api_key, model_name)
+
+
+def call_gemini_api(prompt: str, api_key: str, model_name: str = 'gemini-2.0-flash'):
+    """
+    Gemini APIを呼び出す
+
+    Args:
+        prompt: プロンプト
+        api_key: APIキー
+        model_name: 使用するモデル名
+
+    Returns:
+        APIレスポンス
+    """
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(model_name)
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.types.GenerationConfig(
+            temperature=0.1,
+            max_output_tokens=8000,
+        )
+    )
+    return response
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=2, min=4, max=30),
+    retry=retry_if_exception_type((ResourceExhausted, Exception)),
+    reraise=True
+)
+def call_gemini_with_retry(prompt: str, api_key: str, model_name: str = 'gemini-2.0-flash'):
+    """
+    リトライ機能付きでGemini APIを呼び出す
+    エクスポネンシャルバックオフ: 4秒 → 8秒 → 16秒
+    """
+    return call_gemini_api(prompt, api_key, model_name)
+
+
 def generate_answer(query: str, context_chunks: list) -> str:
     """
-    LLMを使用して回答を生成（Gemini）
+    LLMを使用して回答を生成（Groqメイン、Geminiフォールバック）
 
     Args:
         query: ユーザーの質問
@@ -400,39 +697,89 @@ def generate_answer(query: str, context_chunks: list) -> str:
 
 【回答】"""
 
-    try:
-        # Gemini APIを設定
-        api_key = get_gemini_api_key()
-        genai.configure(api_key=api_key)
+    last_error = None
+    used_provider = None
 
-        # Gemini 2.0 Flash で回答生成
-        model = genai.GenerativeModel('gemini-2.0-flash')
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.1,
-                max_output_tokens=8000,
-            )
-        )
+    # 1. まずGroqを試す（メイン）
+    groq_api_key = get_groq_api_key()
+    if groq_api_key:
+        groq_models = [
+            'llama-3.3-70b-versatile',
+            'llama-3.1-8b-instant',  # フォールバック
+        ]
+        for model_name in groq_models:
+            try:
+                result = call_groq_with_retry(prompt, groq_api_key, model_name)
 
-        # レスポンスの完全性チェック
-        if response.candidates and len(response.candidates) > 0:
-            candidate = response.candidates[0]
-            if candidate.finish_reason.name == "SAFETY":
-                result = "安全性フィルターにより回答がブロックされました。別の質問をお試しください。"
-            elif candidate.content and candidate.content.parts:
-                result = candidate.content.parts[0].text
+                # キャッシュに保存
+                st.session_state.response_cache[cache_key] = result
+
+                return result
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e).lower()
+                # レート制限エラーの場合、次のモデルを試す
+                if '429' in error_str or 'rate' in error_str or 'limit' in error_str:
+                    continue
+                # その他のエラーは次のプロバイダーへ
+                break
+
+    # 2. Groqが失敗したらGeminiを試す（フォールバック）
+    gemini_api_key = get_gemini_api_key()
+    gemini_models = [
+        'gemini-2.0-flash',
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+    ]
+
+    for model_name in gemini_models:
+        try:
+            response = call_gemini_with_retry(prompt, gemini_api_key, model_name)
+
+            # レスポンスの完全性チェック
+            if response.candidates and len(response.candidates) > 0:
+                candidate = response.candidates[0]
+                if candidate.finish_reason.name == "SAFETY":
+                    result = "安全性フィルターにより回答がブロックされました。別の質問をお試しください。"
+                elif candidate.content and candidate.content.parts:
+                    result = candidate.content.parts[0].text
+                else:
+                    result = response.text
             else:
                 result = response.text
-        else:
-            result = response.text
 
-        # キャッシュに保存
-        st.session_state.response_cache[cache_key] = result
+            # キャッシュに保存
+            st.session_state.response_cache[cache_key] = result
 
-        return result
-    except Exception as e:
-        return f"エラー: {str(e)}\n\nAPIキーを確認してください。管理画面からAPIキーを設定できます。"
+            # フォールバック使用を表示
+            result += f"\n\n_(フォールバック: Gemini {model_name}を使用)_"
+
+            return result
+
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            # 429エラーまたはリソース枯渇の場合、次のモデルを試す
+            if '429' in error_str or 'resource' in error_str or 'exhausted' in error_str or 'quota' in error_str:
+                continue
+            # その他のエラーは即座に返す
+            break
+
+    # 全てのプロバイダーで失敗した場合
+    return f"""⚠️ APIが一時的に利用できません。
+
+**エラー詳細**: {str(last_error)}
+
+**対処方法**:
+1. 管理画面からGroq APIキーを設定してください（推奨）
+2. 数分待ってから再度お試しください
+3. よくある質問ボタンを使うと、キャッシュされた回答を利用できます
+
+**Groq APIキーの取得方法**:
+https://console.groq.com/keys からアカウントを作成して無料でAPIキーを取得できます。
+
+申し訳ございませんが、しばらくお待ちください。"""
 
 
 def main():
@@ -566,6 +913,17 @@ def main():
 
         # アシスタントの回答を生成
         with st.chat_message("assistant"):
+            # まず事前キャッシュをチェック（APIを使わない）
+            precached = get_precached_response(prompt)
+            if precached:
+                st.markdown(precached)
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": precached,
+                    "sources": []
+                })
+                st.rerun()
+
             with st.spinner("検索中..."):
                 # 選択した部署をクエリに追加
                 dept = st.session_state.get('selected_department', '')

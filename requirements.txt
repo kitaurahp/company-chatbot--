@@ -9,3 +9,5 @@ torch>=2.1.0
 transformers>=4.36.0
 accelerate>=0.20.0
 google-generativeai>=0.3.0
+tenacity>=8.2.0
+groq>=0.4.0
