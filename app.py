@@ -272,6 +272,7 @@ QUICK_QUESTIONS = [
     {"label": "💰 時間外手当", "question": "時間外手当について教えてください"},
     {"label": "🏠 介護休業", "question": "介護休業について教えてください"},
     {"label": "👶 育児休業", "question": "育児休業について教えてください"},
+    {"label": "🕯️ 忌引休暇", "question": "忌引き休暇について教えてください"},
 ]
 
 
@@ -910,12 +911,20 @@ def main():
                 st.session_state.messages = []  # チャット履歴もクリア
                 st.rerun()
 
-        # よくある質問ボタン（横並び）
+        # よくある質問ボタン（4つずつ2行に分けて表示）
         st.markdown("##### よくある質問")
-        cols = st.columns(len(QUICK_QUESTIONS))
-        for i, q in enumerate(QUICK_QUESTIONS):
-            with cols[i]:
+        # 1行目（4つ）
+        cols1 = st.columns(4)
+        for i, q in enumerate(QUICK_QUESTIONS[:4]):
+            with cols1[i]:
                 if st.button(q["label"], key=f"q_{i}", use_container_width=True):
+                    st.session_state.pending_question = q["question"]
+                    st.rerun()
+        # 2行目（残り）
+        cols2 = st.columns(4)
+        for i, q in enumerate(QUICK_QUESTIONS[4:]):
+            with cols2[i]:
+                if st.button(q["label"], key=f"q2_{i}", use_container_width=True):
                     st.session_state.pending_question = q["question"]
                     st.rerun()
 
